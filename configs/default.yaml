@@ -23,15 +23,24 @@ mid_price:
   model: regime_switching
   s0: 100.0
   regimes:
+    # Per-regime ``gamma`` overrides the global AS gamma below. We keep
+    # ``gamma * sigma**2 = 0.025`` constant across regimes so the
+    # inventory-skew coefficient ``gamma * sigma**2 * (T - t)`` stays
+    # comparable regardless of vol — without this scaling, ``gamma=0.1``
+    # at ``sigma=2`` produces crossed quotes at moderate inventory and
+    # the AS quoter "panic-flattens" at large price haircuts.
     - name: low
       mu: 0.0
       sigma: 0.5
+      gamma: 0.1       # 0.025 / 0.5**2
     - name: normal
       mu: 0.0
       sigma: 1.0
+      gamma: 0.025     # 0.025 / 1.0**2
     - name: high
       mu: 0.0
       sigma: 2.0
+      gamma: 0.00625   # 0.025 / 2.0**2
   # Row-stochastic 3x3 placeholder — see header note above.
   transition_matrix:
     - [0.98, 0.02, 0.0]

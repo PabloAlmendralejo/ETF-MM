@@ -65,22 +65,24 @@ python -m etf_mm_sim run configs/default.yaml
 Prints the run output directory on the first line, then two stacked per-regime paired comparison tables: AS-vs-Symmetric (combined effect of dynamic spread + skew) followed by AS-vs-Semi-AS (isolates the inventory-skew effect alone).
 
 ```
-results/run_20260515T120000Z_a1b2c3d4
+results/run_20260516T151922Z_1161ca49
 
 Per-regime AS vs. Symmetric paired comparison:
-regime  diff_mean_pnl  diff_mean_pnl_ci    diff_max_dd  diff_max_dd_ci
-------  -------------  ------------------  -----------  ------------------
-low     +0.0234        (+0.0152, +0.0316)  -0.0089      (-0.0136, -0.0042)
-normal  +0.0511        (+0.0398, +0.0623)  -0.0247      (-0.0309, -0.0185)
-high    +0.0892        (+0.0701, +0.1083)  -0.0612      (-0.0726, -0.0498)
+regime  diff_mean_pnl  diff_mean_pnl_ci       diff_max_dd  diff_max_dd_ci
+------  -------------  ---------------------  -----------  ------------------------
+low     +49.8405       (+40.5546, +58.9929)   -317.6929    (-325.8949, -309.5473)
+normal  +30.6556       (+4.1128, +56.9091)    -655.3652    (-683.9176, -629.2669)
+high    -49.6345       (-194.8379, +80.4846)  -1516.1365   (-1681.7892, -1372.9714)
 
 Per-regime AS vs. Semi-AS paired comparison (isolates skew effect):
-regime  diff_mean_pnl  diff_mean_pnl_ci    diff_max_dd  diff_max_dd_ci
-------  -------------  ------------------  -----------  ------------------
-low     +0.0041        (-0.0012, +0.0096)  -0.0047      (-0.0072, -0.0021)
-normal  +0.0123        (+0.0058, +0.0188)  -0.0184      (-0.0233, -0.0136)
-high    +0.0301        (+0.0198, +0.0405)  -0.0498      (-0.0596, -0.0398)
+regime  diff_mean_pnl  diff_mean_pnl_ci       diff_max_dd  diff_max_dd_ci
+------  -------------  ---------------------  -----------  ----------------------
+low     -1.3234        (-5.2422, +2.5443)     -120.4290    (-124.2056, -116.8675)
+normal  -2.6985        (-12.5222, +7.0859)    -243.6900    (-253.7183, -233.8372)
+high    -25.8438       (-117.0454, +37.2593)  -562.9676    (-624.4113, -508.4732)
 ```
+
+Reading the headline: AS reduces max drawdown vs. Symmetric in every regime (−318 / −655 / −1516 across low/normal/high vol), with mean P&L positive in low and normal vol and statistically tied in high vol. The AS-vs-Semi-AS comparison isolates inventory skew alone; with the spread schedule held constant, skew accounts for roughly **38% / 37% / 37%** of the AS-vs-Symmetric drawdown reduction at no statistically significant P&L cost in any regime.
 
 Add `--no-plots` to skip plot rendering. The run directory contains:
 
@@ -132,6 +134,27 @@ Comparing AS against the two baselines gives complementary attributions:
 | AS vs Semi-AS | Inventory-skew effect alone (spread schedule held fixed) |
 
 Because the three strategies share the per-path `(mid, fill)` seed sequences, the paired bootstrap CIs are computed on per-path differences and remove the between-path variance driven by mid-price-seed noise. The Semi-AS run produces its own independent fill stream — quotes diverge from AS once inventory diverges, so realized fills differ even though the per-path uniform draws are identical. This is the key change from a counterfactual *replay*: AS-vs-Semi-AS is a true paired Monte Carlo comparison on the same seeded inputs.
+
+### Calibrating γ across volatility regimes
+
+The inventory-skew coefficient is `γ · σ² · (T − t)`. With a single global `γ`, the skew grows quadratically with σ across regimes; at moderate inventory in high-vol, the skewed reservation price can fall enough that AS posts crossed quotes (`δ ≤ 0`) and the fill engine treats them as guaranteed fills at heavily haircut prices. The result is a "panic-flatten" regime that controls drawdown but bleeds expected P&L.
+
+`RegimeParams` accepts an optional per-regime `gamma` field that overrides the global AS γ. The reference config keeps `γ · σ² = 0.025` constant across regimes:
+
+```yaml
+regimes:
+  - name: low
+    sigma: 0.5
+    gamma: 0.1       # 0.025 / 0.5**2
+  - name: normal
+    sigma: 1.0
+    gamma: 0.025     # 0.025 / 1.0**2
+  - name: high
+    sigma: 2.0
+    gamma: 0.00625   # 0.025 / 2.0**2
+```
+
+Without this scaling, high-vol AS underperforms Symmetric by ~140 in mean P&L; with it, the gap shrinks to ~50 and the CI straddles zero. Drawdown reduction holds in both cases.
 
 ## Property-based testing
 

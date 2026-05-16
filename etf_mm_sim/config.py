@@ -73,11 +73,22 @@ __all__ = [
 
 @dataclass(frozen=True)
 class RegimeParams:
-    """Parameters for a single named volatility regime."""
+    """Parameters for a single named volatility regime.
+
+    ``gamma`` is an optional per-regime override of the global
+    Avellaneda-Stoikov risk-aversion coefficient (see
+    :class:`ASParams.gamma`). When set, the backtest uses
+    ``regime.gamma`` for that regime's AS schedule; when ``None`` the
+    global ``cfg.quoters_as.gamma`` is used. The override is useful when
+    ``γ * σ²`` would otherwise grow large enough to produce crossed
+    quotes at typical inventory; a common rule is to keep ``γ * σ²``
+    constant across regimes (e.g. ``γ_r = c / σ_r²``).
+    """
 
     name: str
     mu: float
     sigma: float
+    gamma: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -249,7 +260,7 @@ _TOP_LEVEL_KEYS = {
 }
 _HORIZON_KEYS = {"T", "dt"}
 _MID_PRICE_KEYS = {"model", "s0", "regimes", "transition_matrix"}
-_REGIME_KEYS = {"name", "mu", "sigma"}
+_REGIME_KEYS = {"name", "mu", "sigma", "gamma"}
 _QUOTERS_KEYS = {"avellaneda_stoikov", "symmetric"}
 _AS_KEYS = {"gamma", "k", "A"}
 _SYM_KEYS = {"delta_base"}
@@ -327,7 +338,13 @@ def _parse_regime(node: Any, path: str) -> RegimeParams:
     name = _coerce_str(_require_field(m, "name", path), f"{path}.name")
     mu = _coerce_float(_require_field(m, "mu", path), f"{path}.mu")
     sigma = _coerce_float(_require_field(m, "sigma", path), f"{path}.sigma")
-    return RegimeParams(name=name, mu=mu, sigma=sigma)
+    gamma_raw = m.get("gamma", None)
+    gamma: Optional[float]
+    if gamma_raw is None:
+        gamma = None
+    else:
+        gamma = _coerce_float(gamma_raw, f"{path}.gamma")
+    return RegimeParams(name=name, mu=mu, sigma=sigma, gamma=gamma)
 
 
 def _parse_mid_price(node: Any, path: str) -> MidPriceConfig:
@@ -555,7 +572,12 @@ def dump_config(cfg: Configuration, path: str | os.PathLike[str]) -> None:
             "model": cfg.mid_price.model,
             "s0": cfg.mid_price.s0,
             "regimes": [
-                {"name": r.name, "mu": r.mu, "sigma": r.sigma}
+                {
+                    "name": r.name,
+                    "mu": r.mu,
+                    "sigma": r.sigma,
+                    **({"gamma": r.gamma} if r.gamma is not None else {}),
+                }
                 for r in cfg.mid_price.regimes
             ],
             "transition_matrix": (
@@ -636,6 +658,10 @@ def validate(cfg: Configuration) -> None:
         if r.sigma < 0:
             raise ConfigError(
                 f"mid_price.regimes[{i}].sigma", "must be >= 0", r.sigma
+            )
+        if r.gamma is not None and not (r.gamma > 0):
+            raise ConfigError(
+                f"mid_price.regimes[{i}].gamma", "must be > 0 when set", r.gamma
             )
 
     if cfg.mid_price.model == "regime_switching":

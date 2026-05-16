@@ -129,11 +129,18 @@ def run_backtest(cfg: Configuration) -> BacktestResult:
         # Per resolved design Q1 (a): AS uses the regime's configured
         # sigma. The schedule depends only on (T, dt, gamma, sigma, k) so
         # it is path-independent and computed once per regime.
+        # ``regime.gamma`` (when set) overrides the global ``gamma`` so
+        # callers can scale risk aversion by regime, e.g. to keep
+        # ``gamma * sigma**2`` constant and avoid crossed quotes in
+        # high-vol regimes.
+        gamma_eff = (
+            regime.gamma if regime.gamma is not None else cfg.quoters_as.gamma
+        )
         as_sched = as_precompute(
             s_path=s_paths[0],
             dt=dt,
             T=T,
-            gamma=cfg.quoters_as.gamma,
+            gamma=gamma_eff,
             sigma=regime.sigma,
             k=cfg.quoters_as.k,
         )
