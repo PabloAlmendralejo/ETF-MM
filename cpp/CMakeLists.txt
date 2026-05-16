@@ -1,0 +1,64 @@
+cmake_minimum_required(VERSION 3.20)
+project(etf_mm_sim_cpp CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+if(MSVC)
+    add_compile_options(/W4 /permissive- /Zc:__cplusplus)
+    # Suppress noise from Boost / vcpkg headers without losing real warnings on our code.
+    add_compile_options(/wd4324)  # structure was padded due to alignment specifier (we want this)
+    # MSVC's "_s" variants of stdio aren't portable; stick with std::fopen.
+    add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+else()
+    add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+
+# -------------------------------------------------------------------- #
+# Phase A library: the non-network components (ring, order book, tape).
+# Network components arrive in Phase B / C.
+# -------------------------------------------------------------------- #
+
+add_library(etfmm_core STATIC
+    src/order_book.cpp
+    src/tape.cpp
+)
+target_include_directories(etfmm_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+# -------------------------------------------------------------------- #
+# Tests (GoogleTest).                                                  #
+# -------------------------------------------------------------------- #
+
+option(ETFMM_BUILD_TESTS "Build C++ unit tests" ON)
+
+if(ETFMM_BUILD_TESTS)
+    enable_testing()
+
+    # Prefer a vcpkg-installed GTest if available, otherwise fetch it.
+    find_package(GTest CONFIG QUIET)
+    if(NOT GTest_FOUND)
+        include(FetchContent)
+        FetchContent_Declare(
+            googletest
+            GIT_REPOSITORY https://github.com/google/googletest.git
+            GIT_TAG        release-1.12.1
+        )
+        # On Windows, prevent overriding the parent project's compiler/linker settings.
+        set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+        FetchContent_MakeAvailable(googletest)
+    endif()
+
+    add_executable(etfmm_tests
+        tests/test_ring.cpp
+        tests/test_order_book.cpp
+        tests/test_tape.cpp
+    )
+    target_link_libraries(etfmm_tests PRIVATE etfmm_core)
+    if(TARGET GTest::gtest_main)
+        target_link_libraries(etfmm_tests PRIVATE GTest::gtest_main)
+    else()
+        target_link_libraries(etfmm_tests PRIVATE gtest_main)
+    endif()
+    add_test(NAME etfmm_tests COMMAND etfmm_tests)
+endif()
