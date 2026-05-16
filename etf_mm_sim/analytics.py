@@ -348,51 +348,49 @@ def aggregate_cell(
 
 
 # --------------------------------------------------------------------------- #
-# Paired AS-vs-Symmetric comparison                                           #
+# Paired AS-vs-baseline comparison                                            #
 # --------------------------------------------------------------------------- #
 
 
 @dataclass(frozen=True)
 class PairedComparison:
-    """Paired AS-vs-Symmetric statistics for one volatility regime (Req 8.8).
+    """Paired comparison statistics for one volatility regime (Req 8.8).
 
     All fields are scalars produced from per-path paired differences
-    (``AS[p] - Symmetric[p]``) using the percentile bootstrap from
-    :func:`etf_mm_sim.bootstrap.paired_bootstrap_ci`. The
-    ``skew_dd_attribution`` fields are populated by the counterfactual
-    no-skew replay (Req 8.9) and default to zero when callers do not
-    supply them.
+    (``AS[p] - baseline[p]``) using the percentile bootstrap from
+    :func:`etf_mm_sim.bootstrap.paired_bootstrap_ci`. The comparison is
+    parameterized by ``baseline``: typically ``"symmetric"`` for
+    AS-vs-Symmetric (combined effect of dynamic spread + skew) or
+    ``"semi_as"`` for AS-vs-Semi-AS (isolates the inventory-skew effect
+    alone).
 
     Attributes
     ----------
     regime:
         Volatility-regime name shared by the two strategy cells.
+    baseline:
+        Identifier of the baseline strategy: ``"symmetric"`` or
+        ``"semi_as"``. Lets callers distinguish the two paired
+        comparisons in summary outputs.
     n_paths:
         Number of paired paths consumed (length of each diff array).
     diff_mean_pnl, diff_mean_pnl_ci:
-        Mean of ``as.terminal_pnl - sym.terminal_pnl`` across paths and
-        its ``(lo, hi)`` percentile-bootstrap CI.
+        Mean of ``as.terminal_pnl - baseline.terminal_pnl`` across paths
+        and its ``(lo, hi)`` percentile-bootstrap CI.
     diff_max_dd, diff_max_dd_ci:
-        Mean of :func:`max_drawdown` ``AS - Symmetric`` differences
-        across paths and its CI. Note: positive values mean AS has a
-        *larger* drawdown than the baseline; the AS skew effect is
-        typically *negative* on this metric, hence the dedicated
-        ``skew_dd_attribution`` field below.
-    skew_dd_attribution, skew_dd_attribution_ci:
-        Mean of ``cf_max_dd - as_max_dd`` across paths (counterfactual
-        no-skew minus AS) and its CI; positive values mean AS skew
-        reduced drawdown vs. an otherwise-identical no-skew quoter
-        (Req 8.9).
+        Mean of :func:`max_drawdown` ``AS - baseline`` differences
+        across paths and its CI. Negative values mean AS has a *smaller*
+        drawdown than the baseline (the typical sign for AS-vs-Semi-AS,
+        where the only difference is the addition of inventory skew).
     """
 
     regime: str
+    baseline: str
     n_paths: int
     diff_mean_pnl: float
     diff_mean_pnl_ci: tuple[float, float]
     diff_max_dd: float
     diff_max_dd_ci: tuple[float, float]
-    skew_dd_attribution: float
-    skew_dd_attribution_ci: tuple[float, float]
 
 
 def compute_paired_comparison(
@@ -402,10 +400,9 @@ def compute_paired_comparison(
     bootstrap_iterations: int,
     bootstrap_alpha: float,
     bootstrap_ss: np.random.SeedSequence,
-    skew_dd_attribution: float = 0.0,
-    skew_dd_attribution_ci: tuple[float, float] = (0.0, 0.0),
+    baseline: str,
 ) -> PairedComparison:
-    """Compute paired AS-vs-Symmetric statistics with bootstrap CIs.
+    """Compute paired AS-vs-baseline statistics with bootstrap CIs.
 
     Pairs ``as_cell[i]`` with ``sym_cell[i]`` so the diff arrays
     correspond to the same mid-price seed (Req 7.2). The bootstrap RNG
@@ -416,11 +413,13 @@ def compute_paired_comparison(
     Parameters
     ----------
     as_cell, sym_cell:
-        Path results for the AS and Symmetric strategy cells in the
+        Path results for the AS and baseline strategy cells in the
         same regime. Must be non-empty and of the same length. Pairing
         is *positional* and assumes both cells were produced with the
         same per-path mid-price seed (which the backtest engine
-        guarantees, Req 7.2).
+        guarantees, Req 7.2). Despite the name, ``sym_cell`` may carry
+        either Symmetric or Semi-AS path results -- the comparison
+        operates positionally on whatever baseline is provided.
     regime:
         Regime name copied onto the returned :class:`PairedComparison`.
     bootstrap_iterations:
@@ -434,13 +433,9 @@ def compute_paired_comparison(
         produced by :func:`etf_mm_sim.seeding.analytics_seed`). It is
         *not* consumed directly; we spawn two independent children so
         the P&L and drawdown bootstraps run on disjoint streams.
-    skew_dd_attribution, skew_dd_attribution_ci:
-        Optional pass-through values for the counterfactual-replay
-        attribution fields (Req 8.9). Default to zero so callers that
-        only need the AS-vs-Symmetric pairing can omit them; the full
-        backtest pipeline computes these via
-        :func:`etf_mm_sim.counterfactual.skew_drawdown_attribution`
-        and passes them in.
+    baseline:
+        Identifier copied onto the returned comparison: ``"symmetric"``
+        or ``"semi_as"``.
 
     Returns
     -------
@@ -488,14 +483,10 @@ def compute_paired_comparison(
 
     return PairedComparison(
         regime=regime,
+        baseline=baseline,
         n_paths=n_paths,
         diff_mean_pnl=point_pnl,
         diff_mean_pnl_ci=(pnl_lo, pnl_hi),
         diff_max_dd=point_dd,
         diff_max_dd_ci=(dd_lo, dd_hi),
-        skew_dd_attribution=float(skew_dd_attribution),
-        skew_dd_attribution_ci=(
-            float(skew_dd_attribution_ci[0]),
-            float(skew_dd_attribution_ci[1]),
-        ),
     )

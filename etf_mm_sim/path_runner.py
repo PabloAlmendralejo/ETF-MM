@@ -7,7 +7,7 @@ Bernoulli fills, and emits a :class:`PathResult` summarizing the path. See
 
 Strategy dispatch
 -----------------
-``run_path`` supports two strategies:
+``run_path`` supports three strategies:
 
 * ``"avellaneda_stoikov"`` -- live re-skewing per step. The caller supplies
   the time-varying half-spread schedule ``delta_star_sched`` and inventory-
@@ -23,6 +23,16 @@ Strategy dispatch
 * ``"symmetric"`` -- inventory-independent constant-spread quotes. The
   caller supplies a single ``delta_base`` scalar; quotes are simply
   ``s_path[i] - delta_base`` and ``s_path[i] + delta_base``.
+
+* ``"semi_as"`` -- AS dynamic half-spread schedule with **no inventory
+  skew**. The caller supplies the same ``delta_star_sched`` and
+  ``as_suppress_mask`` as for AS. Internally this branch is implemented
+  as the AS recurrence with the inventory-skew coefficient identically
+  zero (``skew_coef_sched = 0``); the quote midpoint therefore equals
+  ``s_path[i]`` at every non-suppressed step regardless of ``q``. This
+  gives a third strategy paired on the same mid-price seeds whose only
+  difference from AS is the absence of inventory skewing -- the cleanest
+  isolation of the skew effect.
 
 In both cases the *risk-manager* layer additionally suppresses sides when
 the inventory bound is hit (``q >= q_max`` for the bid, ``q <= -q_max``
@@ -74,7 +84,7 @@ __all__ = ["PathResult", "run_path"]
 
 # Allowed strategy names. Centralized so callers can validate against the
 # same set we accept here.
-_VALID_STRATEGIES = ("avellaneda_stoikov", "symmetric")
+_VALID_STRATEGIES = ("avellaneda_stoikov", "symmetric", "semi_as")
 
 
 @dataclass(frozen=True)
@@ -275,6 +285,26 @@ def run_path(
         _require_1d_len(delta_star_arr, n_plus_1, "delta_star_sched")
         _require_1d_len(skew_coef_arr, n_plus_1, "skew_coef_sched")
         _require_1d_len(suppress_arr, n_plus_1, "as_suppress_mask")
+    elif strategy == "semi_as":
+        # Semi-AS: AS dynamic half-spread schedule with zero inventory
+        # skew. We model this internally as the AS recurrence with
+        # ``skew_coef_sched`` identically zero so the quote midpoint is
+        # always ``s_path[i]`` regardless of inventory. The terminal
+        # suppression behaviour is identical to AS (``t_i >= T``); the
+        # caller passes the same ``as_suppress_mask``.
+        if delta_star_sched is None:
+            raise ValueError(
+                "delta_star_sched: required when strategy == 'semi_as'"
+            )
+        if as_suppress_mask is None:
+            raise ValueError(
+                "as_suppress_mask: required when strategy == 'semi_as'"
+            )
+        delta_star_arr = np.ascontiguousarray(delta_star_sched, dtype=np.float64)
+        skew_coef_arr = np.zeros(n_plus_1, dtype=np.float64)
+        suppress_arr = np.ascontiguousarray(as_suppress_mask, dtype=bool)
+        _require_1d_len(delta_star_arr, n_plus_1, "delta_star_sched")
+        _require_1d_len(suppress_arr, n_plus_1, "as_suppress_mask")
     else:  # strategy == "symmetric"
         if delta_base is None:
             raise ValueError("delta_base: required when strategy == 'symmetric'")
@@ -299,7 +329,7 @@ def run_path(
     u_b_local = np.ascontiguousarray(u_b, dtype=np.float64)
     u_a_local = np.ascontiguousarray(u_a, dtype=np.float64)
 
-    is_as = strategy == "avellaneda_stoikov"
+    is_as = strategy == "avellaneda_stoikov" or strategy == "semi_as"
     db = float(delta_base) if delta_base is not None else 0.0
 
     q = 0

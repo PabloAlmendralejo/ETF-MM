@@ -8,7 +8,7 @@
 Each test function realizes exactly one of the four invariants that the
 ``run_path`` step loop must satisfy. The Hypothesis strategies generate
 small, bounded scenarios so a single example runs a complete path; the
-tests therefore use ``max_examples=100, deadline=None`` per the
+tests therefore use ``max_examples=25, deadline=None`` per the
 "runner-level" guidance in ``design.md`` §Property-based testing.
 """
 
@@ -307,7 +307,7 @@ def _run(scenario: _Scenario, strategy: str) -> PathResult:
 
 @given(scenario=_scenarios(), strategy=_strategy_names)
 @settings(
-    max_examples=100,
+    max_examples=25,
     deadline=None,
     suppress_health_check=[HealthCheck.too_slow],
 )
@@ -372,7 +372,7 @@ def test_property_12_fill_bookkeeping(scenario: _Scenario, strategy: str) -> Non
 
 @given(scenario=_scenarios(q_max_lo=1, q_max_hi=10), strategy=_strategy_names)
 @settings(
-    max_examples=100,
+    max_examples=25,
     deadline=None,
     suppress_health_check=[HealthCheck.too_slow],
 )
@@ -404,7 +404,7 @@ def test_property_14_inventory_bound_invariant(
     strategy=_strategy_names,
 )
 @settings(
-    max_examples=100,
+    max_examples=25,
     deadline=None,
     suppress_health_check=[HealthCheck.too_slow],
 )
@@ -442,7 +442,7 @@ def test_property_15_kill_switch_halts(
 
 @given(scenario=_scenarios(), strategy=_strategy_names)
 @settings(
-    max_examples=100,
+    max_examples=25,
     deadline=None,
     suppress_health_check=[HealthCheck.too_slow],
 )

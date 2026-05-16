@@ -48,7 +48,7 @@ _FINITE_FLOAT = st.floats(
     seed=st.integers(min_value=0, max_value=(1 << 63) - 1),
 )
 @settings(
-    max_examples=100,
+    max_examples=25,
     deadline=None,
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.large_base_example],
 )

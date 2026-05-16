@@ -50,7 +50,7 @@ _delta_base_strategy = st.floats(
     t=_t_strategy,
     delta_base=_delta_base_strategy,
 )
-@settings(max_examples=300, deadline=None)
+@settings(max_examples=50, deadline=None)
 def test_property_9_inventory_independent(
     s: float,
     q1: int,

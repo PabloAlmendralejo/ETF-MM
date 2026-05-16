@@ -72,16 +72,19 @@ def _tiny_cfg() -> Configuration:
 
 
 def test_property_17_paired_mid_price_seeding() -> None:
-    """AS and Symmetric quoters see byte-identical ``s_path`` per cell."""
+    """AS, Symmetric, and Semi-AS quoters see byte-identical ``s_path`` per cell."""
     cfg = _tiny_cfg()
     result = run_backtest(cfg)
 
+    strategies = ("avellaneda_stoikov", "symmetric", "semi_as")
     for regime in cfg.mid_price.regimes:
-        as_paths = result.paths[("avellaneda_stoikov", regime.name)]
-        sym_paths = result.paths[("symmetric", regime.name)]
-        assert len(as_paths) == cfg.mc.n_paths
-        assert len(sym_paths) == cfg.mc.n_paths
+        cells = {s: result.paths[(s, regime.name)] for s in strategies}
+        for s in strategies:
+            assert len(cells[s]) == cfg.mc.n_paths
         for p in range(cfg.mc.n_paths):
-            assert np.array_equal(as_paths[p].s_path, sym_paths[p].s_path), (
-                f"mid-price path mismatch in regime={regime.name!r} path={p}"
-            )
+            ref = cells["avellaneda_stoikov"][p].s_path
+            for s in strategies[1:]:
+                assert np.array_equal(cells[s][p].s_path, ref), (
+                    f"mid-price path mismatch in regime={regime.name!r} "
+                    f"strategy={s!r} path={p}"
+                )

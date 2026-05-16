@@ -62,7 +62,7 @@ class BacktestResult:
 
 # Strategy iteration order. Fixed so persistence layout and downstream
 # analytics see strategies in the same canonical order across runs.
-_STRATEGIES: tuple[str, ...] = ("avellaneda_stoikov", "symmetric")
+_STRATEGIES: tuple[str, ...] = ("avellaneda_stoikov", "symmetric", "semi_as")
 
 
 def run_backtest(cfg: Configuration) -> BacktestResult:
@@ -173,11 +173,34 @@ def run_backtest(cfg: Configuration) -> BacktestResult:
                         regime=regime.name,
                         path_index=p,
                     )
-                else:  # strategy == "symmetric"
+                elif strategy == "symmetric":
                     res = run_path(
                         s_paths[p],
                         strategy="symmetric",
                         delta_base=cfg.quoters_sym.delta_base,
+                        u_b=u_b,
+                        u_a=u_a,
+                        A_b=cfg.fill.A_b,
+                        k_b=cfg.fill.k_b,
+                        A_a=cfg.fill.A_a,
+                        k_a=cfg.fill.k_a,
+                        dt=dt,
+                        q_max=cfg.risk.q_max,
+                        L_kill=cfg.risk.L_kill,
+                        regime=regime.name,
+                        path_index=p,
+                    )
+                else:  # strategy == "semi_as"
+                    # Semi-AS: same dynamic half-spread schedule as AS,
+                    # but no inventory skew. The runner handles this by
+                    # internally zeroing skew_coef_sched (see
+                    # path_runner.run_path); we still need to pass the
+                    # AS suppress mask for terminal-step handling.
+                    res = run_path(
+                        s_paths[p],
+                        strategy="semi_as",
+                        delta_star_sched=delta_star_sched,
+                        as_suppress_mask=as_suppress_mask,
                         u_b=u_b,
                         u_a=u_a,
                         A_b=cfg.fill.A_b,

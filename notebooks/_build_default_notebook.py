@@ -25,7 +25,7 @@ def _imports_cell() -> str:
         "matplotlib.use('Agg')\n"
         "from etf_mm_sim.config import load_config, MCParams\n"
         "from etf_mm_sim.backtest import run_backtest\n"
-        "from etf_mm_sim import analytics, viz, counterfactual\n"
+        "from etf_mm_sim import analytics, viz\n"
         "from etf_mm_sim.seeding import analytics_seed\n"
         "from dataclasses import replace\n"
     )
@@ -53,7 +53,7 @@ def _aggregate_cell() -> str:
         "        cfg.analytics.sharpe_annualization_factor,\n"
         "        cfg.analytics.adverse_selection_horizon_steps,\n"
         "    )\n"
-        "    for s in ('avellaneda_stoikov', 'symmetric')\n"
+        "    for s in ('avellaneda_stoikov', 'symmetric', 'semi_as')\n"
         "    for r in cfg.mid_price.regimes\n"
         "]\n"
         "summary = viz.render_summary_table(cells)\n"

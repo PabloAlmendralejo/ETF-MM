@@ -2,7 +2,7 @@
 
 Mode 1: Python-based Avellaneda-Stoikov market-making simulator and Monte Carlo backtester on synthetic mid-price paths.
 
-The simulator benchmarks an Avellaneda-Stoikov (AS) quoter against a symmetric constant-spread baseline across multiple volatility regimes and produces P&L analytics decomposing performance into fill-rate asymmetry, adverse selection, spread capture, and an inventory-skew drawdown attribution computed via a counterfactual no-skew replay.
+The simulator benchmarks an Avellaneda-Stoikov (AS) quoter against two baselines — a Symmetric constant-spread quoter and a Semi-AS quoter (AS dynamic spread, no inventory skew) — across multiple volatility regimes. Comparing AS against Semi-AS isolates the inventory-skew effect; comparing AS against Symmetric measures the combined effect of dynamic spread plus skew. The simulator produces P&L analytics decomposing performance into fill-rate asymmetry, adverse selection, and spread capture.
 
 The C++ lock-free order book, Binance WebSocket tick ingestion, ETF/synthetic-basket NAV deviation tracking, and arbitrage signal generation are deferred to a later iteration and are out of scope for this release.
 
@@ -31,6 +31,7 @@ etf-mm-sim/
 │   ├── mid_price.py        # GBM and regime-switching path generators
 │   ├── quoters/
 │   │   ├── avellaneda_stoikov.py
+│   │   ├── semi_as.py
 │   │   └── symmetric.py
 │   ├── fill_engine.py      # Poisson λ = A·exp(-k·δ); Bernoulli per step
 │   ├── risk_manager.py     # Inventory bounds, kill-switch, terminal flatten
@@ -38,7 +39,6 @@ etf-mm-sim/
 │   ├── backtest.py         # Monte Carlo orchestration
 │   ├── analytics.py        # P&L metrics + per-cell aggregation
 │   ├── bootstrap.py        # Paired percentile bootstrap CI
-│   ├── counterfactual.py   # No-skew replay for drawdown attribution
 │   ├── persistence.py      # Deterministic Parquet + JSON
 │   ├── viz.py              # matplotlib renderers
 │   └── cli.py              # python -m etf_mm_sim run <config.yaml>
@@ -62,17 +62,24 @@ Required runtime: Python 3.11+, NumPy, pandas, pyarrow, PyYAML, matplotlib. Opti
 python -m etf_mm_sim run configs/default.yaml
 ```
 
-Prints the run output directory on the first line, then a per-regime AS-vs-Symmetric paired comparison table:
+Prints the run output directory on the first line, then two stacked per-regime paired comparison tables: AS-vs-Symmetric (combined effect of dynamic spread + skew) followed by AS-vs-Semi-AS (isolates the inventory-skew effect alone).
 
 ```
 results/run_20260515T120000Z_a1b2c3d4
 
 Per-regime AS vs. Symmetric paired comparison:
-regime  diff_mean_pnl  diff_mean_pnl_ci          skew_dd_attribution  skew_dd_attribution_ci
-------  -------------  ------------------------  -------------------  -------------------------
-low     +0.0234        (+0.0152, +0.0316)        +0.0089              (+0.0042, +0.0136)
-normal  +0.0511        (+0.0398, +0.0623)        +0.0247              (+0.0185, +0.0309)
-high    +0.0892        (+0.0701, +0.1083)        +0.0612              (+0.0498, +0.0726)
+regime  diff_mean_pnl  diff_mean_pnl_ci    diff_max_dd  diff_max_dd_ci
+------  -------------  ------------------  -----------  ------------------
+low     +0.0234        (+0.0152, +0.0316)  -0.0089      (-0.0136, -0.0042)
+normal  +0.0511        (+0.0398, +0.0623)  -0.0247      (-0.0309, -0.0185)
+high    +0.0892        (+0.0701, +0.1083)  -0.0612      (-0.0726, -0.0498)
+
+Per-regime AS vs. Semi-AS paired comparison (isolates skew effect):
+regime  diff_mean_pnl  diff_mean_pnl_ci    diff_max_dd  diff_max_dd_ci
+------  -------------  ------------------  -----------  ------------------
+low     +0.0041        (-0.0012, +0.0096)  -0.0047      (-0.0072, -0.0021)
+normal  +0.0123        (+0.0058, +0.0188)  -0.0184      (-0.0233, -0.0136)
+high    +0.0301        (+0.0198, +0.0405)  -0.0498      (-0.0596, -0.0398)
 ```
 
 Add `--no-plots` to skip plot rendering. The run directory contains:
@@ -109,16 +116,22 @@ master_seed → SeedSequence.spawn(R + 1)
 
 AS and Symmetric quoters share the same `(mid, fill)` seeds at every `(regime, path)` cell so observed differences come from quoting behavior, not path noise.
 
-## Inventory-skew drawdown attribution
+## Three-strategy paired comparison
 
-The `skew_dd_attribution` metric isolates the cash effect of AS inventory skew by:
+The simulator runs three quoting strategies on the same shared mid-price seeds for every `(regime, path)` cell:
 
-1. Recording the realized AS fill events per path.
-2. Replaying those *same fills* against a counterfactual no-skew quoter posting at `s ± δ*` (AS spread, no skew).
-3. Computing the per-path drawdown difference `cf_max_dd − as_max_dd`.
-4. Reporting the mean and a paired percentile-bootstrap CI per regime.
+- **Symmetric** — constant half-spread `δ_base` posted at `s ± δ_base`. No inventory skew, no time decay. The simplest baseline.
+- **Semi-AS** — AS dynamic half-spread `δ*(t)` posted at `s ± δ*(t)`. The spread shrinks toward `(1/γ)·ln(1 + γ/k)` as `t → T`, but quotes are always centered on the mid: no inventory skew.
+- **AS** — full Avellaneda-Stoikov: `r ± δ*(t)` with `r = s − q·γ·σ²·(T − t)`. Dynamic spread plus inventory skew.
 
-A positive value means the AS skew *reduced* drawdown vs an otherwise-identical quoter that would have posted the same spread but kept its midpoint at the unskewed mid. This is the cash effect of skew given the same fills; it is not a full counterfactual P&L because the AS-imposed inventory bounds are still implicit in the fill stream.
+Comparing AS against the two baselines gives complementary attributions:
+
+| Comparison | What it measures |
+| --- | --- |
+| AS vs Symmetric | Combined effect of dynamic spread + inventory skew |
+| AS vs Semi-AS | Inventory-skew effect alone (spread schedule held fixed) |
+
+Because the three strategies share the per-path `(mid, fill)` seed sequences, the paired bootstrap CIs are computed on per-path differences and remove the between-path variance driven by mid-price-seed noise. The Semi-AS run produces its own independent fill stream — quotes diverge from AS once inventory diverges, so realized fills differ even though the per-path uniform draws are identical. This is the key change from a counterfactual *replay*: AS-vs-Semi-AS is a true paired Monte Carlo comparison on the same seeded inputs.
 
 ## Property-based testing
 
@@ -130,8 +143,9 @@ A positive value means the AS skew *reduced* drawdown vs an otherwise-identical 
 - **P10–P13**: fill intensity / probability / crossed-quote / RNG determinism.
 - **P14–P16**: inventory bound invariant, kill-switch latch, terminal-flatten identity.
 - **P17–P18**: paired mid-price seeding across strategies, bit-identical persisted outputs.
-- **P19–P22**: max-DD non-negativity, spread-capture formula, bootstrap determinism, counterfactual inventory equality.
+- **P19–P21**: max-DD non-negativity, spread-capture formula, bootstrap determinism.
 - **P23**: SeedSequence tree determinism.
+- **Semi-AS A/B/C** (`tests/property/test_semi_as_quoter.py`): Semi-AS quotes are mid-symmetric; Semi-AS half-spread equals AS `δ*(t)` pointwise; Semi-AS suppresses at `t ≥ T` (matching AS terminal handling).
 
 Run them all:
 

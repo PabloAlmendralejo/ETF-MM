@@ -85,7 +85,7 @@ def test_backtest_smoke(tmp_path: pathlib.Path) -> None:
 
     # Per-cell counts must equal n_paths for every (strategy, regime).
     n_paths = cfg.mc.n_paths
-    expected_strategies = ("avellaneda_stoikov", "symmetric")
+    expected_strategies = ("avellaneda_stoikov", "symmetric", "semi_as")
     regime_names = [r.name for r in cfg.mid_price.regimes]
     assert set(result.paths.keys()) == {
         (strategy, name)

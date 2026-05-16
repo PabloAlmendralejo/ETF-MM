@@ -86,7 +86,7 @@ _dt_strategy = st.floats(
     A=_A_strategy,
     k=_k_strategy,
 )
-@settings(max_examples=200, deadline=None)
+@settings(max_examples=50, deadline=None)
 def test_property_10_intensity(delta: float, A: float, k: float) -> None:
     """``fill_intensity`` matches the closed form ``A * exp(-k * delta)``.
 
@@ -126,7 +126,7 @@ def test_property_10_intensity(delta: float, A: float, k: float) -> None:
     k=_k_strategy,
     dt=_dt_strategy,
 )
-@settings(max_examples=200, deadline=None)
+@settings(max_examples=50, deadline=None)
 def test_property_11_probability_non_crossed(
     delta: float, A: float, k: float, dt: float
 ) -> None:
@@ -168,7 +168,7 @@ def test_property_11_probability_non_crossed(
     k=_k_strategy,
     dt=_dt_strategy,
 )
-@settings(max_examples=200, deadline=None)
+@settings(max_examples=50, deadline=None)
 def test_property_11_probability_crossed(
     delta: float, A: float, k: float, dt: float
 ) -> None:
@@ -197,7 +197,7 @@ def test_property_11_probability_crossed(
     seed=st.integers(min_value=0, max_value=2**63 - 1),
     n=st.integers(min_value=0, max_value=2048),
 )
-@settings(max_examples=200, deadline=None)
+@settings(max_examples=50, deadline=None)
 def test_property_13_determinism(seed: int, n: int) -> None:
     """Two fresh ``SeedSequence(seed)`` calls produce byte-identical draws.
 

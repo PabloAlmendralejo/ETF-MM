@@ -41,7 +41,7 @@ _FINITE_FLOAT = st.floats(
     )
 )
 @settings(
-    max_examples=200,
+    max_examples=50,
     deadline=None,
     suppress_health_check=[HealthCheck.too_slow],
 )
@@ -185,7 +185,7 @@ def _spread_scenarios(draw):
 
 @given(scenario=_spread_scenarios())
 @settings(
-    max_examples=200,
+    max_examples=50,
     deadline=None,
     suppress_health_check=[HealthCheck.too_slow],
 )

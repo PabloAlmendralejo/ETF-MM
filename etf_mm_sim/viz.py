@@ -51,16 +51,18 @@ __all__ = [
 ]
 
 
-# Strategy → display label and color. The AS / Symmetric pair gets
-# distinct, colorblind-friendly colors so the overlay histograms remain
-# readable when printed in grayscale.
+# Strategy → display label and color. The AS / Symmetric / Semi-AS
+# triple gets distinct, colorblind-friendly colors so the overlay
+# histograms remain readable when printed in grayscale.
 _STRATEGY_LABELS: dict[str, str] = {
     "avellaneda_stoikov": "Avellaneda-Stoikov",
     "symmetric": "Symmetric",
+    "semi_as": "Semi-AS",
 }
 _STRATEGY_COLORS: dict[str, str] = {
     "avellaneda_stoikov": "#1f77b4",  # tab:blue
     "symmetric": "#d62728",           # tab:red
+    "semi_as": "#2ca02c",             # tab:green
 }
 
 
@@ -75,9 +77,9 @@ def plot_terminal_pnl_hist(
     bins: int = 30,
     save_path: pathlib.Path | None = None,
 ) -> matplotlib.figure.Figure:
-    """Overlay AS and Symmetric terminal-P&L histograms for one regime.
+    """Overlay AS, Symmetric, and Semi-AS terminal-P&L histograms for one regime.
 
-    Both histograms are drawn at 50% alpha so the overlap region is
+    All histograms are drawn at 50% alpha so the overlap region is
     visible. Strategy labels appear in the legend; the y-axis is plain
     counts (not density) because the per-strategy sample sizes match by
     construction (paired Monte Carlo, Req 7.2).
@@ -106,16 +108,17 @@ def plot_terminal_pnl_hist(
     Raises
     ------
     KeyError
-        If either strategy cell for ``regime`` is missing from the
+        If any expected strategy cell for ``regime`` is missing from the
         backtest result.
     """
     fig, ax = plt.subplots(figsize=(8, 5))
 
-    # Use a shared bin edge set so the two histograms are directly
-    # comparable; deriving it from the union of both samples avoids
+    strategies = ("avellaneda_stoikov", "symmetric", "semi_as")
+    # Use a shared bin edge set so the histograms are directly
+    # comparable; deriving it from the union of all samples avoids
     # one strategy's tail drifting outside the binned range.
     samples: dict[str, np.ndarray] = {}
-    for strategy in ("avellaneda_stoikov", "symmetric"):
+    for strategy in strategies:
         cell = result.paths[(strategy, regime)]
         samples[strategy] = np.array(
             [float(pr.terminal_pnl) for pr in cell], dtype=np.float64
@@ -131,7 +134,7 @@ def plot_terminal_pnl_hist(
         # does not raise on `bins=[]`.
         bin_edges = np.array([0.0, 1.0])
 
-    for strategy in ("avellaneda_stoikov", "symmetric"):
+    for strategy in strategies:
         ax.hist(
             samples[strategy],
             bins=bin_edges,
@@ -323,7 +326,7 @@ def save_all_figures(
 
     cfg = result.config
     regime_names = [r.name for r in cfg.mid_price.regimes]
-    strategies = ("avellaneda_stoikov", "symmetric")
+    strategies = ("avellaneda_stoikov", "symmetric", "semi_as")
 
     # 1) Terminal-P&L histograms per regime.
     for regime in regime_names:

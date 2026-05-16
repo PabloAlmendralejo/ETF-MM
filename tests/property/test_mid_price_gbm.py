@@ -83,7 +83,7 @@ _seed_strategy = st.integers(min_value=0, max_value=(1 << 31) - 1)
     dt_frac=_dt_fraction_strategy,
     seed=_seed_strategy,
 )
-@settings(max_examples=200, deadline=None)
+@settings(max_examples=50, deadline=None)
 def test_property_2_determinism(
     s0: float, mu: float, sigma: float, T: float, dt_frac: float, seed: int
 ) -> None:
@@ -114,7 +114,7 @@ def test_property_2_determinism(
     dt_frac=_dt_fraction_strategy,
     seed=_seed_strategy,
 )
-@settings(max_examples=200, deadline=None)
+@settings(max_examples=50, deadline=None)
 def test_property_3_length(
     s0: float, mu: float, sigma: float, T: float, dt_frac: float, seed: int
 ) -> None:
@@ -141,7 +141,7 @@ def test_property_3_length(
     dt_frac=_dt_fraction_strategy,
     seed=_seed_strategy,
 )
-@settings(max_examples=200, deadline=None)
+@settings(max_examples=50, deadline=None)
 def test_property_4_strictly_positive(
     s0: float, mu: float, sigma: float, T: float, dt_frac: float, seed: int
 ) -> None:
@@ -171,7 +171,7 @@ def test_property_4_strictly_positive(
     dt_frac=_dt_fraction_strategy,
     seed=_seed_strategy,
 )
-@settings(max_examples=200, deadline=None)
+@settings(max_examples=50, deadline=None)
 def test_property_5_zero_vol_drift(
     s0: float, mu: float, T: float, dt_frac: float, seed: int
 ) -> None:

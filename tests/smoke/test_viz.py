@@ -86,12 +86,13 @@ def test_plot_terminal_pnl_hist_returns_figure(tiny_result) -> None:
         # At least one Axes was added.
         axes = fig.get_axes()
         assert len(axes) >= 1
-        # Both strategies should contribute a legend entry.
+        # All three strategies should contribute a legend entry.
         legend = axes[0].get_legend()
         assert legend is not None
         labels = {t.get_text() for t in legend.get_texts()}
         assert "Avellaneda-Stoikov" in labels
         assert "Symmetric" in labels
+        assert "Semi-AS" in labels
     finally:
         plt.close(fig)
 
@@ -141,7 +142,7 @@ def test_render_summary_table_schema(tiny_result) -> None:
     """``render_summary_table`` produces a DataFrame with the expected schema."""
     cfg = tiny_result.config
     cells = []
-    for strategy in ("avellaneda_stoikov", "symmetric"):
+    for strategy in ("avellaneda_stoikov", "symmetric", "semi_as"):
         for regime in cfg.mid_price.regimes:
             cells.append(
                 analytics.aggregate_cell(
@@ -155,8 +156,8 @@ def test_render_summary_table_schema(tiny_result) -> None:
     summary = viz.render_summary_table(cells)
 
     assert isinstance(summary, pd.DataFrame)
-    # 2 strategies × 2 regimes = 4 rows.
-    assert len(summary) == 4
+    # 3 strategies × 2 regimes = 6 rows.
+    assert len(summary) == 6
     # Columns must match every CellSummary field, in declared order.
     expected_columns = [f.name for f in dataclasses.fields(CellSummary)]
     assert list(summary.columns) == expected_columns
@@ -205,7 +206,7 @@ def test_save_all_figures_writes_files(
         f = plots_dir / f"terminal_pnl_{regime.name}.png"
         assert f.is_file() and f.stat().st_size > 0
     # One sample-path PNG per (strategy, regime) cell.
-    for strategy in ("avellaneda_stoikov", "symmetric"):
+    for strategy in ("avellaneda_stoikov", "symmetric", "semi_as"):
         for regime in cfg.mid_price.regimes:
             f = plots_dir / f"sample_path_{strategy}_{regime.name}.png"
             assert f.is_file() and f.stat().st_size > 0

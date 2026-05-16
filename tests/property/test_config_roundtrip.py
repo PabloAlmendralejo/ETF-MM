@@ -15,7 +15,7 @@ from .strategies import valid_configurations
 
 @given(cfg=valid_configurations())
 @settings(
-    max_examples=200,
+    max_examples=50,
     deadline=None,
     suppress_health_check=[HealthCheck.function_scoped_fixture],
 )

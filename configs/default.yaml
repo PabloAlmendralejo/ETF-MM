@@ -57,7 +57,10 @@ risk:
   L_kill: null   # null disables the running-P&L kill switch
 
 mc:
-  n_paths: 1000
+  # Production path count for CLI runs. The notebook overrides this to
+  # 100 for fast iteration; production runs target 10_000 paths so the
+  # paired-bootstrap CIs are tight.
+  n_paths: 10000
 
 analytics:
   adverse_selection_horizon_steps: 50

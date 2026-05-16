@@ -32,11 +32,10 @@ from typing import Optional
 
 import numpy as np
 
-from . import analytics, counterfactual, viz
+from . import analytics, viz
 from .backtest import run_backtest
 from .config import ConfigError, load_config
 from .persistence import PersistenceError, persist
-from .quoters.avellaneda_stoikov import precompute as as_precompute
 from .seeding import analytics_seed
 
 __all__ = ["main"]
@@ -89,8 +88,8 @@ def _format_paired_summary(rows: list[dict[str, object]]) -> str:
         "regime",
         "diff_mean_pnl",
         "diff_mean_pnl_ci",
-        "skew_dd_attribution",
-        "skew_dd_attribution_ci",
+        "diff_max_dd",
+        "diff_max_dd_ci",
     )
 
     def _fmt(v: object) -> str:
@@ -133,74 +132,68 @@ def _run_command(config_path: pathlib.Path, no_plots: bool) -> int:
     n_regimes = len(cfg.mid_price.regimes)
     # Reserved analytics seed → spawn one sub-sequence per regime so the
     # bootstraps for distinct regimes do not share state. Each regime
-    # spawns a further (paired_comparison, skew_attribution) split.
+    # spawns a further (vs-symmetric, vs-semi-as) split.
     analytics_ss = analytics_seed(cfg.master_seed, n_regimes)
     regime_seeds = analytics_ss.spawn(n_regimes)
 
-    paired_rows: list[dict[str, object]] = []
+    vs_sym_rows: list[dict[str, object]] = []
+    vs_semi_rows: list[dict[str, object]] = []
     for r_idx, regime in enumerate(cfg.mid_price.regimes):
         as_cell = result.paths[("avellaneda_stoikov", regime.name)]
         sym_cell = result.paths[("symmetric", regime.name)]
+        semi_cell = result.paths[("semi_as", regime.name)]
 
         # Aggregate per-cell summaries (kept around so callers can later
-        # reuse them; the CLI itself only needs the paired comparison).
-        analytics.aggregate_cell(
-            as_cell,
-            "avellaneda_stoikov",
-            regime.name,
-            cfg.analytics.sharpe_annualization_factor,
-            cfg.analytics.adverse_selection_horizon_steps,
-        )
-        analytics.aggregate_cell(
-            sym_cell,
-            "symmetric",
-            regime.name,
-            cfg.analytics.sharpe_annualization_factor,
-            cfg.analytics.adverse_selection_horizon_steps,
-        )
+        # reuse them; the CLI itself only needs the paired comparisons).
+        for strategy, cell in (
+            ("avellaneda_stoikov", as_cell),
+            ("symmetric", sym_cell),
+            ("semi_as", semi_cell),
+        ):
+            analytics.aggregate_cell(
+                cell,
+                strategy,
+                regime.name,
+                cfg.analytics.sharpe_annualization_factor,
+                cfg.analytics.adverse_selection_horizon_steps,
+            )
 
-        # Counterfactual no-skew replay needs the AS half-spread schedule
-        # for each path. The schedule depends only on (T, dt, gamma,
-        # sigma, k) so it is shared across all paths in the regime.
-        sched = as_precompute(
-            s_path=as_cell[0].s_path,
-            dt=cfg.horizon.dt,
-            T=cfg.horizon.T,
-            gamma=cfg.quoters_as.gamma,
-            sigma=regime.sigma,
-            k=cfg.quoters_as.k,
-        )["delta_star"]
-        delta_star_per_path = [sched] * len(as_cell)
+        # Two independent bootstrap streams for the two paired
+        # comparisons so they do not share state.
+        vs_sym_ss, vs_semi_ss = regime_seeds[r_idx].spawn(2)
 
-        paired_ss, attr_ss = regime_seeds[r_idx].spawn(2)
-
-        skew_attr, skew_ci = counterfactual.skew_drawdown_attribution(
-            as_cell,
-            delta_star_per_path,
-            cfg.analytics.bootstrap_iterations,
-            cfg.analytics.bootstrap_alpha,
-            attr_ss,
-        )
-
-        paired = analytics.compute_paired_comparison(
+        paired_vs_sym = analytics.compute_paired_comparison(
             as_cell,
             sym_cell,
             regime.name,
             cfg.analytics.bootstrap_iterations,
             cfg.analytics.bootstrap_alpha,
-            paired_ss,
-            skew_dd_attribution=skew_attr,
-            skew_dd_attribution_ci=skew_ci,
+            vs_sym_ss,
+            baseline="symmetric",
         )
-        paired_rows.append(
-            {
-                "regime": paired.regime,
-                "diff_mean_pnl": paired.diff_mean_pnl,
-                "diff_mean_pnl_ci": paired.diff_mean_pnl_ci,
-                "skew_dd_attribution": paired.skew_dd_attribution,
-                "skew_dd_attribution_ci": paired.skew_dd_attribution_ci,
-            }
+        paired_vs_semi = analytics.compute_paired_comparison(
+            as_cell,
+            semi_cell,
+            regime.name,
+            cfg.analytics.bootstrap_iterations,
+            cfg.analytics.bootstrap_alpha,
+            vs_semi_ss,
+            baseline="semi_as",
         )
+
+        for paired, rows in (
+            (paired_vs_sym, vs_sym_rows),
+            (paired_vs_semi, vs_semi_rows),
+        ):
+            rows.append(
+                {
+                    "regime": paired.regime,
+                    "diff_mean_pnl": paired.diff_mean_pnl,
+                    "diff_mean_pnl_ci": paired.diff_mean_pnl_ci,
+                    "diff_max_dd": paired.diff_max_dd,
+                    "diff_max_dd_ci": paired.diff_max_dd_ci,
+                }
+            )
 
     # --- Plots. ------------------------------------------------------- #
     if not no_plots:
@@ -214,11 +207,16 @@ def _run_command(config_path: pathlib.Path, no_plots: bool) -> int:
 
     # --- stdout reporting. ------------------------------------------- #
     # Run directory first (machine-friendly: a downstream script can
-    # capture the first line). Followed by the human-readable summary.
+    # capture the first line). Followed by the human-readable summaries:
+    # AS-vs-Symmetric (combined effect of dynamic spread + skew), then
+    # AS-vs-Semi-AS (isolates the inventory-skew effect alone).
     print(str(run_dir))
     print()
     print("Per-regime AS vs. Symmetric paired comparison:")
-    print(_format_paired_summary(paired_rows))
+    print(_format_paired_summary(vs_sym_rows))
+    print()
+    print("Per-regime AS vs. Semi-AS paired comparison (isolates skew effect):")
+    print(_format_paired_summary(vs_semi_rows))
     return 0
 
 

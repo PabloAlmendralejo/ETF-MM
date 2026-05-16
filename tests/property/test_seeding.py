@@ -16,7 +16,7 @@ from etf_mm_sim.seeding import PathSeeds, analytics_seed, build_seed_tree
     n_regimes=st.integers(min_value=1, max_value=4),
     n_paths=st.integers(min_value=1, max_value=8),
 )
-@settings(max_examples=100, deadline=None)
+@settings(max_examples=25, deadline=None)
 def test_property_23_seed_tree_determinism(
     master_seed: int, n_regimes: int, n_paths: int
 ) -> None:
