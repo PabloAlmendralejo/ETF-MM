@@ -1,0 +1,12 @@
+{
+  "name": "etf-mm-sim-cpp",
+  "version-string": "0.1.0",
+  "description": "C++ subtree for etf-mm-sim: live order book + tape capture/replay",
+  "dependencies": [
+    "boost-beast",
+    "boost-asio",
+    "openssl",
+    "nlohmann-json",
+    "gtest"
+  ]
+}

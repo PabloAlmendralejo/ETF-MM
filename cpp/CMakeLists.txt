@@ -1,4 +1,16 @@
 cmake_minimum_required(VERSION 3.20)
+
+# Pick up the vcpkg toolchain automatically if VCPKG_ROOT is set in the
+# environment. This MUST run before `project(...)` because the vcpkg
+# toolchain installs the manifest-listed dependencies during the first
+# configure, and that hook needs to fire before any `find_package` is
+# evaluated. Without this, `find_package(Boost ...)` below errors out
+# even though VCPKG_ROOT is set.
+if(DEFINED ENV{VCPKG_ROOT} AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+    set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+        CACHE STRING "vcpkg toolchain file")
+endif()
+
 project(etf_mm_sim_cpp CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -11,6 +23,8 @@ if(MSVC)
     add_compile_options(/wd4324)  # structure was padded due to alignment specifier (we want this)
     # MSVC's "_s" variants of stdio aren't portable; stick with std::fopen.
     add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+    # Boost.Asio / Beast require an explicit Windows version target. 0x0A00 = Windows 10.
+    add_compile_definitions(_WIN32_WINNT=0x0A00)
 else()
     add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
@@ -23,8 +37,22 @@ endif()
 add_library(etfmm_core STATIC
     src/order_book.cpp
     src/tape.cpp
+    src/ws_client.cpp
 )
 target_include_directories(etfmm_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+# Boost.Beast for WebSocket + TLS, OpenSSL for the TLS backend.
+find_package(Boost REQUIRED CONFIG COMPONENTS asio beast)
+find_package(OpenSSL REQUIRED)
+target_link_libraries(etfmm_core PUBLIC Boost::asio Boost::beast OpenSSL::SSL OpenSSL::Crypto)
+if(WIN32)
+    # Boost.Asio on Windows pulls in Winsock2; ensure we link it explicitly.
+    target_link_libraries(etfmm_core PUBLIC ws2_32 mswsock)
+endif()
+
+# Capture binary.
+add_executable(etfmm_capture src/capture_main.cpp)
+target_link_libraries(etfmm_capture PRIVATE etfmm_core)
 
 # -------------------------------------------------------------------- #
 # Tests (GoogleTest).                                                  #
