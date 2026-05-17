@@ -4,7 +4,9 @@ Mode 1: Python-based Avellaneda-Stoikov market-making simulator and Monte Carlo 
 
 The simulator benchmarks an Avellaneda-Stoikov (AS) quoter against two baselines — a Symmetric constant-spread quoter and a Semi-AS quoter (AS dynamic spread, no inventory skew) — across multiple volatility regimes. Comparing AS against Semi-AS isolates the inventory-skew effect; comparing AS against Symmetric measures the combined effect of dynamic spread plus skew. The simulator produces P&L analytics decomposing performance into fill-rate asymmetry, adverse selection, and spread capture.
 
-The C++ lock-free order book, Binance WebSocket tick ingestion, ETF/synthetic-basket NAV deviation tracking, and arbitrage signal generation are deferred to a later iteration and are out of scope for this release.
+A C++17 subtree under [`cpp/`](cpp/README.md) (Mode 3) ships a real-time WebSocket consumer for Binance BTCUSDT spot + perpetual futures, an `std::map<Price, Level>` order book backed by a single-producer single-consumer lock-free ring on the WS → book interface, a deterministic binary tape format for capture, a replay binary, and a spot-vs-perp basis-deviation strategy with EWMA smoothing and threshold-crossing events. See [`docs/spec/mode3_design.md`](docs/spec/mode3_design.md) for the architecture and [`cpp/README.md`](cpp/README.md) for build instructions.
+
+The Mode 1 Python simulator and the Mode 3 C++ subtree are independent — the two halves do not call each other. They live in the same repo for cohesion of the CV story.
 
 ## Avellaneda-Stoikov closed form
 

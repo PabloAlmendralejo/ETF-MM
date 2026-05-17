@@ -38,13 +38,15 @@ add_library(etfmm_core STATIC
     src/order_book.cpp
     src/tape.cpp
     src/ws_client.cpp
+    src/basis_strategy.cpp
 )
 target_include_directories(etfmm_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # Boost.Beast for WebSocket + TLS, OpenSSL for the TLS backend.
 find_package(Boost REQUIRED CONFIG COMPONENTS asio beast)
 find_package(OpenSSL REQUIRED)
-target_link_libraries(etfmm_core PUBLIC Boost::asio Boost::beast OpenSSL::SSL OpenSSL::Crypto)
+find_package(nlohmann_json CONFIG REQUIRED)
+target_link_libraries(etfmm_core PUBLIC Boost::asio Boost::beast OpenSSL::SSL OpenSSL::Crypto nlohmann_json::nlohmann_json)
 if(WIN32)
     # Boost.Asio on Windows pulls in Winsock2; ensure we link it explicitly.
     target_link_libraries(etfmm_core PUBLIC ws2_32 mswsock)
@@ -53,6 +55,10 @@ endif()
 # Capture binary.
 add_executable(etfmm_capture src/capture_main.cpp)
 target_link_libraries(etfmm_capture PRIVATE etfmm_core)
+
+# Replay binary.
+add_executable(etfmm_replay src/replay_main.cpp)
+target_link_libraries(etfmm_replay PRIVATE etfmm_core)
 
 # -------------------------------------------------------------------- #
 # Tests (GoogleTest).                                                  #
@@ -81,6 +87,7 @@ if(ETFMM_BUILD_TESTS)
         tests/test_ring.cpp
         tests/test_order_book.cpp
         tests/test_tape.cpp
+        tests/test_basis_strategy.cpp
     )
     target_link_libraries(etfmm_tests PRIVATE etfmm_core)
     if(TARGET GTest::gtest_main)

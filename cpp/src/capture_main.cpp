@@ -129,8 +129,10 @@ int main(int argc, char** argv) {
         "/stream?streams=btcusdt@depth@100ms/btcusdt@bookTicker"};
     spot_client.set_on_text(make_handler(Venue::Spot, *spot_ring));
 
+    // Binance Futures uses port 443 (the default wss:// port), not 9443.
+    // The 9443 endpoint is spot-only.
     WsClient perp_client{
-        "fstream.binance.com", "9443",
+        "fstream.binance.com", "443",
         "/stream?streams=btcusdt@depth@100ms/btcusdt@bookTicker"};
     perp_client.set_on_text(make_handler(Venue::Perp, *perp_ring));
 
